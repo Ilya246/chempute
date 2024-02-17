@@ -107,20 +107,30 @@ size_t getScale(const reagent& reag, const unordered_set<string>& traversed_in) 
     if (scale_cache.contains(reag.name)) {
         return scale_cache[reag.name];
     }
-    if (reag.recipes_output.empty() || !doScale || ignore_reagents.contains(reag.name)) {
-        scale_cache[reag.name] = 1;
-        return 1;
-    }
     unordered_set<string> traversed(traversed_in);
     traversed.insert(reag.name);
     size_t min_scale = numeric_limits<size_t>::max();
+    bool has_recipe = false;
     for (recipe* reci_ptr : reag.recipes_output) {
         recipe reci = *reci_ptr;
+        bool recursed = false;
+        for (const auto& [in_reag_name, in_param_ptr] : reci.inputs) {
+            recipe_input in_param = *in_param_ptr;
+            reagent in_reag = reagent_map[in_reag_name];
+            if (traversed.contains(in_reag.name)) {
+                recursed = true;
+                break;
+            }
+        }
+        if (recursed) {
+            continue;
+        }
+        has_recipe = true;
         vector<double> outs;
         for (const auto& [in_reag_name, in_param_ptr] : reci.inputs) {
             recipe_input in_param = *in_param_ptr;
             reagent in_reag = reagent_map[in_reag_name];
-            if (in_reag.recipes_output.empty() || traversed.contains(in_reag.name)) {
+            if (traversed.contains(in_reag.name)) {
                 continue;
             }
             outs.push_back(lcm((long long)in_param.amount, (long long)getScale(in_reag, traversed)) / in_param.amount);
@@ -130,7 +140,10 @@ size_t getScale(const reagent& reag, const unordered_set<string>& traversed_in) 
             scale = lcm((long long)scale, (long long)round(d));
         }
         scale *= reci.outputs[reag.name];
-        min_scale = min(scale, min_scale);
+        min_scale = std::max((size_t)1, (size_t)std::min(scale, min_scale));
+    }
+    if (!has_recipe) {
+        min_scale = 1;
     }
     scale_cache[reag.name] = min_scale;
     return min_scale;
@@ -138,18 +151,35 @@ size_t getScale(const reagent& reag, const unordered_set<string>& traversed_in) 
 size_t getScale(const reagent& reag) {
     return getScale(reag, unordered_set<string>());
 }
-void analyzeReagent(const reagent& reag, unordered_map<string, double>* amounts_in, short indent_n, double req_out, const unordered_set<string>& traversed_in) {
+bool analyzeReagent(const reagent& reag, unordered_map<string, double>* amounts_in, short indent_n, double req_out, const unordered_set<string>& traversed_in) {
     unordered_set<string> traversed(traversed_in);
     traversed.insert(reag.name);
     string indent(indent_n * ind_num, ind_char);
+    short count = 0;
+    bool has_valid_recipe = false;
     for (recipe* reci_ptr : reag.recipes_output) {
-        unordered_map<string, double>* amounts = (amounts_in == nullptr ? new unordered_map<string, double> : amounts_in);
         recipe reci = *reci_ptr;
+        unordered_map<string, double>* amounts = (amounts_in == nullptr ? new unordered_map<string, double> : amounts_in);
+        bool recursed = false;
+        for (const auto& [in_reag_name, in_param_ptr] : reci.inputs) {
+            if (traversed.contains(in_reag_name)) {
+                recursed = true;
+                break;
+            }
+        }
+        if (recursed) {
+            continue;
+        }
+        has_valid_recipe = true;
+        if (count > 0) {
+            cout << indent << "[OR]" << endl;
+        }
         double scale = getScale(reag, traversed);
         if (req_out > 0) {
-            scale *= req_out / scale;
+            scale = req_out;
         }
         scale /= reci.outputs[reag.name];
+        string to_out = "";
         for (const auto& [out_reag_name, out_amount] : reci.outputs) {
             reagent out_reag = reagent_map[out_reag_name];
             cout << indent << "[O] " << out_reag.name << ": " << out_amount * scale << endl;
@@ -159,11 +189,10 @@ void analyzeReagent(const reagent& reag, unordered_map<string, double>* amounts_
             reagent in_reag = reagent_map[in_reag_name];
             double required_amount = in_param.catalyst ? getScale(in_reag) * ceil(in_param.amount / (double)getScale(in_reag)) : in_param.amount * scale;
             cout << indent << (in_param.catalyst ? "[C] " : "[I] ") << in_reag.name << ": " << required_amount << endl;
-            if (in_reag.recipes_output.empty() || traversed.contains(in_reag.name) || ignore_reagents.contains(in_reag.name)) {
+            if (ignore_reagents.contains(in_reag.name) || !analyzeReagent(in_reag, amounts, indent_n + 1, required_amount, traversed)) {
                 (*amounts)[in_reag_name] = (*amounts)[in_reag_name] + required_amount;
                 continue;
             }
-            analyzeReagent(in_reag, amounts, indent_n + 1, required_amount, traversed);
         }
         if (amounts_in == nullptr) {
             for (const auto& [reag_name, amount] : *amounts) {
@@ -171,7 +200,9 @@ void analyzeReagent(const reagent& reag, unordered_map<string, double>* amounts_
             }
             delete amounts;
         }
+        ++count;
     }
+    return has_valid_recipe;
 }
 void analyzeReagent(const reagent& reag, short indent_n, double req_out) {
     analyzeReagent(reag, nullptr, indent_n, req_out, unordered_set<string>());

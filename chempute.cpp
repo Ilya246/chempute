@@ -130,9 +130,6 @@ size_t getScale(const reagent& reag, const unordered_set<string>& traversed_in) 
         for (const auto& [in_reag_name, in_param_ptr] : reci.inputs) {
             recipe_input in_param = *in_param_ptr;
             reagent in_reag = reagent_map[in_reag_name];
-            if (traversed.contains(in_reag.name)) {
-                continue;
-            }
             outs.push_back(lcm((long long)in_param.amount, (long long)getScale(in_reag, traversed)) / in_param.amount);
         }
         size_t scale = 1;
@@ -288,9 +285,6 @@ int main(int argc, char* argv[]) {
                     }
                     if (!reagent_map.contains(split[0])) {
                         reagent_map[split[0]] = reagent{split[0], {}, {}};
-                        if (!analyzeAll) {
-                            cout << "Parsed: " << split[0] << endl;
-                        }
                     }
                     cur_reagent = &reagent_map[split[0]];
                     if (state == p_products) {
@@ -328,7 +322,6 @@ int main(int argc, char* argv[]) {
         }
         return 0;
     }
-    cout << "Parsed reactions and reagents" << endl;
     while (true) {
         cout << "Reagent to find recipe for: " << endl;
         string analyze_ID;

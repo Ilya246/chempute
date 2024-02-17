@@ -1,0 +1,9 @@
+Blood
+Carbon
+Hydrogen
+Oxygen
+CarbonDioxide
+Water
+Sugar
+Ethanol
+Nitrogen
